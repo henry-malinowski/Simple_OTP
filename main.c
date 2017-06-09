@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <immintrin.h>  // Intel random generation engine
 #include <stdnoreturn.h>
+#include <stdbool.h>
 
 #define ULL_SIZE sizeof(unsigned long long)
 
@@ -84,22 +85,22 @@ typedef enum {OTP_ENCRYPT, OTP_DECRYPT, OTP_NULLMODE, OTP_ERROR} E_PROGRAM_MODE 
  */
 int main(int argc, char* argv[argc]) {
     FILE *input_file, *output_file, *otp_file;
-    char const* input_file_name = NULL;
-    char const* outpad_file = NULL;
-    char const* otp_file_name = NULL;
+    char const *input_file_name = NULL;
+    char const *outpad_file = NULL;
+    char const *otp_file_name = NULL;
     E_PROGRAM_MODE program_mode = OTP_NULLMODE;
 
-    if (argc <= 1)
-    {
+    bool verbose_print = false;
+    FILE *verbose_printer = fopen("/dev/null", "w+");
+
+    if (argc <= 1) {
         fprintf(stderr, "Program requires arguments\n");
         print_usage(argc, argv);
     }
 
     // Process command line arguments
-    for (; (argc > 1) && (argv[1][0]) == '-'; --argc, ++argv)
-    {
-        switch (argv[1][1])
-        {
+    for (; (argc > 1) && (argv[1][0]) == '-'; --argc, ++argv) {
+        switch (argv[1][1]) {
             case 'e':   // Encryption mode
                 if (program_mode == OTP_DECRYPT) {
                     fprintf(stderr, "-e can not be used with -d\n");
@@ -128,6 +129,11 @@ int main(int argc, char* argv[argc]) {
                 break;
             case 'o':   // specify output file names or names (mode dependant)
                 break;
+            case 'v':   // enable verbose printing
+                verbose_print = true;
+                fclose(verbose_printer);
+                verbose_printer = stdout;
+                break;
             default:
                 fprintf(stderr, "Invalid argument \"%s\"\n", argv[1]);
                 print_usage(argc, argv);
@@ -139,36 +145,44 @@ int main(int argc, char* argv[argc]) {
             // open requested input file
             input_file = fopen(input_file_name, "rb");
             if (input_file == NULL) {
-                fprintf(stderr, "%s is an invalid file name\n", input_file_name);
+                fprintf(stderr, "%s is an invalid file name\n",
+                        input_file_name);
                 exit(EXIT_FAILURE);
             } else {
-                printf("debug: opened plain-text file - \"%s\" in read-binary\n", input_file_name);
+                fprintf(verbose_printer,
+                        "debug: opened plain-text file - \"%s\" in read-binary\n",
+                        input_file_name);
             }
 
             // open one-time-pad for writing
-            if (otp_file_name == NULL)
-            {
-                printf("debug: -p not used, selecting default output name\n");
+            if (otp_file_name == NULL) {
+                fprintf(verbose_printer,
+                        "debug: -p not used, selecting default output name\n");
                 otp_file_name = "one-time-pad.otp";
             }
             otp_file = fopen(otp_file_name, "wb");
             if (otp_file == NULL) {
-                fprintf(stderr, "Unable to open \"%s\" in write-binary\n", otp_file_name);
+                fprintf(stderr, "Unable to open \"%s\" in write-binary\n",
+                        otp_file_name);
                 fclose(input_file);
                 exit(EXIT_FAILURE);
             } else {
-                printf("debug: opened file - \"%s\" in write-binary\n", otp_file_name);
+                fprintf(verbose_printer,
+                        "debug: opened file - \"%s\" in write-binary\n",
+                        otp_file_name);
             }
 
             // open output-file for writing
             output_file = fopen("output.txt", "wb");
             if (output_file == NULL) {
-                fprintf(stderr, "Unable to open \"output.txt\" in write-binary\n");
+                fprintf(stderr,
+                        "Unable to open \"output.txt\" in write-binary\n");
                 fclose(input_file);
                 fclose(otp_file);
                 exit(EXIT_FAILURE);
             } else {
-                printf("debug: opened file - \"output.txt\" in write-binary\n");
+                fprintf(verbose_printer,
+                        "debug: opened file - \"output.txt\" in write-binary\n");
             }
 
             encrypt(input_file, output_file, otp_file);
@@ -182,31 +196,39 @@ int main(int argc, char* argv[argc]) {
             // open requested input file
             input_file = fopen(input_file_name, "rb");
             if (input_file == NULL) {
-                fprintf(stderr, "%s is an invalid file name\n", input_file_name);
+                fprintf(stderr, "%s is an invalid file name\n",
+                        input_file_name);
                 exit(EXIT_FAILURE);
             } else {
-                printf("debug: opened cipher-text file - \"%s\"in read-binary\n", input_file_name);
+                fprintf(verbose_printer,
+                        "debug: opened cipher-text file - \"%s\" in read-binary\n",
+                        input_file_name);
             }
 
             // open one-time-pad for writing
             otp_file = fopen(otp_file_name, "rb");
             if (otp_file == NULL) {
-                fprintf(stderr, "Unable to open \"%s\" in read-binary\n", otp_file_name);
+                fprintf(stderr, "Unable to open \"%s\" in read-binary\n",
+                        otp_file_name);
                 fclose(input_file);
                 exit(EXIT_FAILURE);
             } else {
-                printf("debug: opened file - \"%s\" in read-binary\n", otp_file_name);
+                fprintf(verbose_printer,
+                        "debug: opened file - \"%s\" in read-binary\n",
+                        otp_file_name);
             }
 
             // open output-file for writing
             output_file = fopen("decrypt_output.txt", "wb");
             if (output_file == NULL) {
-                fprintf(stderr, "Unable to open \"decrypt_output.txt\" in write-binary\n");
+                fprintf(stderr,
+                        "Unable to open \"decrypt_output.txt\" in write-binary\n");
                 fclose(input_file);
                 fclose(otp_file);
                 exit(EXIT_FAILURE);
             } else {
-                printf("debug: opened file - \"decrypt_output.txt\" in write-binary\n");
+                fprintf(verbose_printer,
+                        "debug: opened file - \"decrypt_output.txt\" in write-binary\n");
             }
 
             decrypt(input_file, output_file, otp_file);
@@ -216,6 +238,9 @@ int main(int argc, char* argv[argc]) {
         default:
             break;
     }
+
+    if (!verbose_print)
+        fclose(verbose_printer);
 }
 
 
