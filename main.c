@@ -2,6 +2,8 @@
  * input file is set to: "input.txt" for testing
  * output file is set to "output.txt" for testing
  * one-time-pad is is set to "testing.otp" for testing
+ *
+ * SIGSEGV if files aren't provided
  */
 
 #include <stdio.h>
@@ -11,15 +13,15 @@
 #define ULL_SIZE sizeof(unsigned long long)
 
 //#define REAL_TIME_DECRYPT 1
-#define DECRYPT 1
+//#define DECRYPT 1
 
 #ifndef DECRYPT
 #define ENCRYPT 1
 #endif
 
 typedef union {
-    unsigned long long ull;
     unsigned char c[ULL_SIZE];
+    unsigned long long ull;
 } char_container;
 
 long
@@ -55,14 +57,22 @@ size_missmatch(void);
 
 
 noreturn void
-print_usage(int argc, char* const argv[argc]);
+print_usage(int argc, char* const argv[argc])
+{
+    fprintf(stderr, "debug: print usage has not been implemented yet");
+    exit(2);
+}
+
+typedef enum {OTP_ENCRYPT, OTP_DECRYPT, OTP_NULLMODE, OTP_ERROR} E_PROGRAM_MODE ;
 
 /**
  * The core logic for the program.
  * Program arguments:
- * * --help Displays the help message.
- * * -e Encrypts an input file and outputs the one-time-pad with a unique file name
- * * -d Decrypts an input file and it's one-time-pad
+ * * --help / -? Displays the help message.
+ * * -e / --encrypt Encrypts an input file and outputs the one-time-pad with a unique file name
+ * * -d / --decrypt Decrypts an input file and it's one-time-pad
+ * * -p / --one-time-pad Selects a name for the one-time-pad
+ * * -o output file path/name (optional)
  *
  * @param argc The number of arguments present in \p argc.
  * @param argv The input arguments in the form of NULL-terminated strings.
@@ -73,25 +83,143 @@ print_usage(int argc, char* const argv[argc]);
  * @retval 3 Indicates that the Intel random number engine failed to return properly.
  */
 int main(int argc, char* argv[argc]) {
-    FILE *input_file, *output_file, *opt_file;
+    FILE *input_file, *output_file, *otp_file;
+    char const* input_file_name = NULL;
+    char const* outpad_file = NULL;
+    char const* otp_file_name = NULL;
+    E_PROGRAM_MODE program_mode = OTP_NULLMODE;
 
-#ifdef ENCRYPT
-        input_file = fopen("input.txt", "rb");
-        opt_file = fopen("testing.otp", "wb");
-        output_file = fopen("output.txt", "wb");
+    if (argc <= 1)
+    {
+        fprintf(stderr, "Program requires arguments\n");
+        print_usage(argc, argv);
+    }
 
-        encrypt(input_file, output_file, opt_file);
-#else
-        input_file = fopen("output.txt", "rb");
-        opt_file = fopen("testing.otp", "rb");
-        output_file = fopen("output_test.txt", "wb");
+    // Process command line arguments
+    for (; (argc > 1) && (argv[1][0]) == '-'; --argc, ++argv)
+    {
+        switch (argv[1][1])
+        {
+            case 'e':   // Encryption mode
+                if (program_mode == OTP_DECRYPT) {
+                    fprintf(stderr, "-e can not be used with -d\n");
+                    exit(EXIT_FAILURE);
+                }
 
-        decrypt(input_file, output_file, opt_file);
-#endif
+                ++argv;
+                --argc;
+                input_file_name = argv[1];
+                program_mode = OTP_ENCRYPT;
+                break;
+            case 'd':   // Decryption mode
+                if (program_mode == OTP_ENCRYPT) {
+                    fprintf(stderr, "-d can not be used -e\n");
+                    exit(EXIT_FAILURE);
+                }
+                ++argv;
+                --argc;
+                input_file_name = argv[1];
+                program_mode = OTP_DECRYPT;
+                break;
+            case 'p':   // Specify one time pad for decryption
+                ++argv;
+                --argc;
+                otp_file_name = argv[1];
+                break;
+            case 'o':   // specify output file names or names (mode dependant)
+                break;
+            default:
+                fprintf(stderr, "Invalid argument \"%s\"\n", argv[1]);
+                print_usage(argc, argv);
+        }
+    }
+
+    switch (program_mode) {
+        case OTP_ENCRYPT:
+            // open requested input file
+            input_file = fopen(input_file_name, "rb");
+            if (input_file == NULL) {
+                fprintf(stderr, "%s is an invalid file name\n", input_file_name);
+                exit(EXIT_FAILURE);
+            } else {
+                printf("debug: opened plain-text file - \"%s\" in read-binary\n", input_file_name);
+            }
+
+            // open one-time-pad for writing
+            if (otp_file_name == NULL)
+            {
+                printf("debug: -p not used, selecting default output name\n");
+                otp_file_name = "one-time-pad.otp";
+            }
+            otp_file = fopen(otp_file_name, "wb");
+            if (otp_file == NULL) {
+                fprintf(stderr, "Unable to open \"%s\" in write-binary\n", otp_file_name);
+                fclose(input_file);
+                exit(EXIT_FAILURE);
+            } else {
+                printf("debug: opened file - \"%s\" in write-binary\n", otp_file_name);
+            }
+
+            // open output-file for writing
+            output_file = fopen("output.txt", "wb");
+            if (output_file == NULL) {
+                fprintf(stderr, "Unable to open \"output.txt\" in write-binary\n");
+                fclose(input_file);
+                fclose(otp_file);
+                exit(EXIT_FAILURE);
+            } else {
+                printf("debug: opened file - \"output.txt\" in write-binary\n");
+            }
+
+            encrypt(input_file, output_file, otp_file);
+
+            // close file connections
+            fclose(input_file);
+            fclose(otp_file);
+            fclose(output_file);
+            break;
+        case OTP_DECRYPT:
+            // open requested input file
+            input_file = fopen(input_file_name, "rb");
+            if (input_file == NULL) {
+                fprintf(stderr, "%s is an invalid file name\n", input_file_name);
+                exit(EXIT_FAILURE);
+            } else {
+                printf("debug: opened cipher-text file - \"%s\"in read-binary\n", input_file_name);
+            }
+
+            // open one-time-pad for writing
+            otp_file = fopen(otp_file_name, "rb");
+            if (otp_file == NULL) {
+                fprintf(stderr, "Unable to open \"%s\" in read-binary\n", otp_file_name);
+                fclose(input_file);
+                exit(EXIT_FAILURE);
+            } else {
+                printf("debug: opened file - \"%s\" in read-binary\n", otp_file_name);
+            }
+
+            // open output-file for writing
+            output_file = fopen("decrypt_output.txt", "wb");
+            if (output_file == NULL) {
+                fprintf(stderr, "Unable to open \"decrypt_output.txt\" in write-binary\n");
+                fclose(input_file);
+                fclose(otp_file);
+                exit(EXIT_FAILURE);
+            } else {
+                printf("debug: opened file - \"decrypt_output.txt\" in write-binary\n");
+            }
+
+            decrypt(input_file, output_file, otp_file);
+            fclose(input_file);
+            fclose(otp_file);
+            fclose(output_file);
+        default:
+            break;
+    }
 
     // close file connections
     fclose(input_file);
-    fclose(opt_file);
+    fclose(otp_file);
     fclose(output_file);
 }
 
