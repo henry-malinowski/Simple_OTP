@@ -22,7 +22,8 @@ typedef union {
     unsigned char c[ULL_SIZE];
 } char_container;
 
-long fsize(FILE *fp);
+long
+fsize(FILE *fp);
 
 /**
  * Encrypts in input file, using random numbers generated from a secure source
@@ -31,7 +32,8 @@ long fsize(FILE *fp);
  * @param output     [out] An open connection to the output file in binary write mode.
  * @param otp        [out] An open connection to a file that will contain the one-time-pad for \p output.
  */
-void encrypt(FILE* plain_text, FILE* ouput, FILE* otp);
+void
+encrypt(FILE* plain_text, FILE* ouput, FILE* otp);
 
 
 /**
@@ -40,12 +42,20 @@ void encrypt(FILE* plain_text, FILE* ouput, FILE* otp);
  * @param output      [out] An open connection to the output file in binary write mode.
  * @param otp         [in]  An open connection to the one-time-pad in binary read mode.
  */
-void decrypt(FILE* cipher_text, FILE* output, FILE* otp);
+void
+decrypt(FILE* cipher_text, FILE* output, FILE* otp);
 
 
-noreturn void invalid_file_size(const char *str);
-noreturn void size_missmatch(void);
-noreturn void print_usage(int argc, char* const argv[argc]);
+noreturn void
+invalid_file_size(const char *str);
+
+
+noreturn void
+size_missmatch(void);
+
+
+noreturn void
+print_usage(int argc, char* const argv[argc]);
 
 /**
  * The core logic for the program.
@@ -96,14 +106,19 @@ void encrypt(FILE* plain_text, FILE* ouput, FILE* otp) {
     ldiv_t blocks_r = ldiv(cipher_size, ULL_SIZE);
 
     char_container one_time_pad;
-    char_container input_pad = {.ull = 0ULL};
+    char_container cipher_pad = {.ull = 0ULL};
 
-    /* main encryption loop
-     *
+    /* Core encryption loop
+     * - Reads in ULL_SIZE bytes from Intel rdrand64
+     * - Reads in ULL_SIZE bytes from the plain_text into cipher_pad
+     * - XORs the bytes against each other and store them back into cipher_pad
+     * - Writes the bytes out one byte at a time
      */
-    for (long i = 0; i < blocks_r.quot; ++i) {
+    for (long i = 0; i < blocks_r.quot; ++i)
+    {
         // generate 64-bits (8 bytes) of random bits
-        if(!_rdrand64_step(&one_time_pad.ull)) {
+        if(!_rdrand64_step(&one_time_pad.ull))
+        {
             fprintf(stderr, "failed to read from sysrand\n");
             exit(3);
         }
@@ -112,28 +127,31 @@ void encrypt(FILE* plain_text, FILE* ouput, FILE* otp) {
         fwrite(one_time_pad.c, sizeof(char), ULL_SIZE, otp);
 
         // read in the next 8 bytes in
-        fread(input_pad.c, sizeof(char), ULL_SIZE, plain_text);
+        fread(cipher_pad.c, sizeof(char), ULL_SIZE, plain_text);
 
         // XOR the pads against each other
-        input_pad.ull ^= one_time_pad.ull;
+        cipher_pad.ull ^= one_time_pad.ull;
 
-        // write the XORed plain_text to the output file
-        fwrite(input_pad.c, sizeof(char), ULL_SIZE, ouput);
+        // write the new cipher_text to the output file
+        fwrite(cipher_pad.c, sizeof(char), ULL_SIZE, ouput);
     }
 
     // handle remaining bytes using the same logic as above
-    if (blocks_r.rem) {
-        size_t remainder = (size_t) blocks_r.rem;
-        printf("debug: handling a remainder of %zu bytes\n", remainder);
+    if (blocks_r.rem)
+    {
+        size_t remain = (size_t) blocks_r.rem;
+        printf("debug: handling a remaining %zu bytes\n", remain);
 
-        if(!_rdrand64_step(&one_time_pad.ull)) {
+        if(!_rdrand64_step(&one_time_pad.ull))
+        {
             fprintf(stderr, "failed to read from sysrand\n");
             exit(3);
         }
-        fwrite(one_time_pad.c, sizeof(char), remainder, otp);
-        fread(input_pad.c, sizeof(char), remainder, plain_text);
-        input_pad.ull ^= one_time_pad.ull;
-        fwrite(input_pad.c, sizeof(char), remainder, ouput);
+
+        fwrite(one_time_pad.c, sizeof(char), remain, otp);
+        fread(cipher_pad.c, sizeof(char), remain, plain_text);
+        cipher_pad.ull ^= one_time_pad.ull;
+        fwrite(cipher_pad.c, sizeof(char), remain, ouput);
     }
 }
 
@@ -141,49 +159,50 @@ void encrypt(FILE* plain_text, FILE* ouput, FILE* otp) {
 void decrypt(FILE* cipher_text, FILE* output, FILE* otp) {
     // Error check the input files
     long cipher_size = fsize(cipher_text);
-    if (cipher_size <= 0) {
+    if (cipher_size <= 0)
         invalid_file_size("cipher text");
-    }
 
     long otp_size = fsize(otp);
-    if (otp_size <= 0) {
+    if (otp_size <= 0)
         invalid_file_size("one-time-pad");
-    }
 
-    if (cipher_size != otp_size) {
+    if (cipher_size != otp_size)
         size_missmatch();
-    }
 
     ldiv_t blocks_r = ldiv(cipher_size, ULL_SIZE);
-    char_container one_time_pad = {0}, output_pad = {0};
+    char_container one_time_pad = {0}, cipher_pad = {0};
 
     /* Core decryption loop
      * - Reads in ULL_SIZE bytes from the one-time-pad
      * - Reads in ULL_SIZE bytes from the cipher_text
-     * - XORs the bytes against each-other and stores them back into output_pad
+     * - XORs the bytes against each-other and stores them back into cipher_pad
      * - Writes the bytes out one byte at a time
      */
-    for (size_t i = 0; i < blocks_r.quot; ++i) {
+    for (long i = 0; i < blocks_r.quot; ++i)
+    {
         fread(one_time_pad.c, sizeof(char), ULL_SIZE, otp);
-        fread(output_pad.c, sizeof(char), ULL_SIZE, cipher_text);
+        fread(cipher_pad.c, sizeof(char), ULL_SIZE, cipher_text);
 
-        output_pad.ull ^= one_time_pad.ull;
-        fwrite(output_pad.c, sizeof(char), ULL_SIZE, output);
+        cipher_pad.ull ^= one_time_pad.ull;
+        fwrite(cipher_pad.c, sizeof(char), ULL_SIZE, output);
     }
 
     // handle remaining text using the same logic as above
-    if (blocks_r.rem) {
+    if (blocks_r.rem)
+    {
         size_t remain = (size_t) blocks_r.rem;
         fread(one_time_pad.c, sizeof(char), remain, otp);
-        fread(output_pad.c, sizeof(char), remain, cipher_text);
+        fread(cipher_pad.c, sizeof(char), remain, cipher_text);
 
-        output_pad.ull ^= one_time_pad.ull;
-        fwrite(output_pad.c, sizeof(char), ULL_SIZE, output);
+        cipher_pad.ull ^= one_time_pad.ull;
+        fwrite(cipher_pad.c, sizeof(char), ULL_SIZE, output);
     }
 }
 
 
-long fsize(FILE *fp) {
+long
+fsize(FILE *fp)
+{
     long prev = ftell(fp);
     fseek(fp, 0L, SEEK_END);
 
@@ -194,13 +213,15 @@ long fsize(FILE *fp) {
 }
 
 
-noreturn void invalid_file_size(const char *str) {
+noreturn void invalid_file_size(const char *str)
+{
     fprintf(stderr, "fatal: invalid file size \"%s\"(greater than 2GiB or empty file)\n", str);
     exit(2);
 }
 
 
-noreturn void size_missmatch(void) {
+noreturn void size_missmatch(void)
+{
     fprintf(stderr, "fatal: size mismatch during decryption\n");
     fprintf(stderr, "       cipher text length does not equal the length of the one-time-pad\n");
     exit(3);
