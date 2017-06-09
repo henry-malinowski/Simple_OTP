@@ -59,7 +59,7 @@ size_missmatch(void);
 noreturn void
 print_usage(int argc, char* const argv[argc])
 {
-    fprintf(stderr, "debug: print usage has not been implemented yet");
+    fprintf(stderr, "debug: print usage has not been implemented yet\n");
     exit(2);
 }
 
@@ -216,11 +216,6 @@ int main(int argc, char* argv[argc]) {
         default:
             break;
     }
-
-    // close file connections
-    fclose(input_file);
-    fclose(otp_file);
-    fclose(output_file);
 }
 
 
