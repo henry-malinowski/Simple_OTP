@@ -1,11 +1,3 @@
-/**
- * input file is set to: "input.txt" for testing
- * output file is set to "output.txt" for testing
- * one-time-pad is is set to "testing.otp" for testing
- *
- * SIGSEGV if files aren't provided
- */
-
 #include <stdio.h>
 #include <immintrin.h>  // Intel random generation engine
 #include <stdnoreturn.h>
@@ -13,20 +5,22 @@
 
 #define ULL_SIZE sizeof(unsigned long long)
 
-//#define REAL_TIME_DECRYPT 1
-//#define DECRYPT 1
-
-#ifndef DECRYPT
-#define ENCRYPT 1
-#endif
-
 typedef union {
     unsigned char c[ULL_SIZE];
     unsigned long long ull;
 } char_container;
 
+
+typedef enum {OTP_ENCRYPT, OTP_DECRYPT, OTP_NULLMODE, OTP_ERROR} E_PROGRAM_MODE;
+
+/**
+ * Returns the length of an open file \p fp.
+ * @param fp The to take the length of.
+ * @returns The lenght of file \p fp.
+ */
 long
 fsize(FILE *fp);
+
 
 /**
  * Encrypts in input file, using random numbers generated from a secure source
@@ -49,14 +43,27 @@ void
 decrypt(FILE* cipher_text, FILE* output, FILE* otp);
 
 
+/**
+ * Exit routine when an invalid file is specified.
+ * @param str A string indicating which file was invalid.
+ */
 noreturn void
 invalid_file_size(const char *str);
 
 
+/**
+ * Exit routine for when there is a size mismatch between the cipher text and
+ *  the one-time-pad.
+ */
 noreturn void
 size_missmatch(void);
 
 
+/**
+ * Generic exit routine and print usage function. Exits the program with code 2.
+ * @param argc The number of arguments present in \p argc.
+ * @param argv The input arguments in the form of NULL-terminated strings.
+ */
 noreturn void
 print_usage(int argc, char* const argv[argc])
 {
@@ -64,22 +71,21 @@ print_usage(int argc, char* const argv[argc])
     exit(2);
 }
 
-typedef enum {OTP_ENCRYPT, OTP_DECRYPT, OTP_NULLMODE, OTP_ERROR} E_PROGRAM_MODE ;
 
 /**
  * The core logic for the program.
  * Program arguments:
- * * --help / -? Displays the help message.
- * * -e / --encrypt Encrypts an input file and outputs the one-time-pad with a unique file name
- * * -d / --decrypt Decrypts an input file and it's one-time-pad
- * * -p / --one-time-pad Selects a name for the one-time-pad
- * * -o output file path/name (optional)
+ * - --help / -? Displays the help message.
+ * - -e / --encrypt Encrypts an input file and outputs the one-time-pad with a unique file name
+ * - -d / --decrypt Decrypts an input file and it's one-time-pad
+ * - -p / --one-time-pad Selects a name for the one-time-pad
+ * - -o output file path/name (optional)
  *
  * @param argc The number of arguments present in \p argc.
  * @param argv The input arguments in the form of NULL-terminated strings.
  * @return A status code to the caller (likely the OS).
  * @retval 0 Indicates the program exited successfully.
- * @retval 1 Indicates the program failed in some generic fashion.
+ * @retval 1 Indicates the program failed in some generic fashion (file not found).
  * @retval 2 Indicates the input file size is to large.
  * @retval 3 Indicates that the Intel random number engine failed to return properly.
  */
@@ -130,9 +136,11 @@ int main(int argc, char* argv[argc]) {
             case 'o':   // specify output file names or names (mode dependant)
                 break;
             case 'v':   // enable verbose printing
-                verbose_print = true;
                 fclose(verbose_printer);
+                verbose_print = true;
                 verbose_printer = stdout;
+                break;
+            case '-':   // use long name arguments
                 break;
             default:
                 fprintf(stderr, "Invalid argument \"%s\"\n", argv[1]);
@@ -248,7 +256,7 @@ void encrypt(FILE* plain_text, FILE* ouput, FILE* otp) {
     // Error check the input files
     long cipher_size = fsize(plain_text);
     if (cipher_size <= 0) {
-        invalid_file_size("plaintext");
+        invalid_file_size(plain_text->);
     }
 
     ldiv_t blocks_r = ldiv(cipher_size, ULL_SIZE);
@@ -271,16 +279,12 @@ void encrypt(FILE* plain_text, FILE* ouput, FILE* otp) {
             exit(3);
         }
 
-        // write the bits out to the one-time-pad
+        // read in file data
         fwrite(one_time_pad.c, sizeof(char), ULL_SIZE, otp);
-
-        // read in the next 8 bytes in
         fread(cipher_pad.c, sizeof(char), ULL_SIZE, plain_text);
 
-        // XOR the pads against each other
+        // XOR and write out encrypted data
         cipher_pad.ull ^= one_time_pad.ull;
-
-        // write the new cipher_text to the output file
         fwrite(cipher_pad.c, sizeof(char), ULL_SIZE, ouput);
     }
 
@@ -305,7 +309,10 @@ void encrypt(FILE* plain_text, FILE* ouput, FILE* otp) {
 
 
 void decrypt(FILE* cipher_text, FILE* output, FILE* otp) {
-    // Error check the input files
+    /* - Check that the cipher text has a valid file size.
+     * - Check that the one-time-pad has a valid file size
+     * - Verify that the one-time-pad is the same length as the cipher text.
+     */
     long cipher_size = fsize(cipher_text);
     if (cipher_size <= 0)
         invalid_file_size("cipher text");
@@ -335,7 +342,7 @@ void decrypt(FILE* cipher_text, FILE* output, FILE* otp) {
         fwrite(cipher_pad.c, sizeof(char), ULL_SIZE, output);
     }
 
-    // handle remaining text using the same logic as above
+    // handle remaining text using the same logic as the Core decryption loop.
     if (blocks_r.rem)
     {
         size_t remain = (size_t) blocks_r.rem;
@@ -343,7 +350,7 @@ void decrypt(FILE* cipher_text, FILE* output, FILE* otp) {
         fread(cipher_pad.c, sizeof(char), remain, cipher_text);
 
         cipher_pad.ull ^= one_time_pad.ull;
-        fwrite(cipher_pad.c, sizeof(char), ULL_SIZE, output);
+        fwrite(cipher_pad.c, sizeof(char), remain, output);
     }
 }
 
